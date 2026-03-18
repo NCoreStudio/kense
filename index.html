@@ -796,9 +796,9 @@ function renderResStats() {
   document.getElementById("st-total").textContent = total;
   document.getElementById("st-pass").textContent  = pass;
   document.getElementById("st-fail").textContent  = total - pass;
-  document.getElementById("st-avg").textContent   = avg + "%";
-  document.getElementById("st-max").textContent   = Math.max(...scores) + "%";
-  document.getElementById("st-min").textContent   = Math.min(...scores) + "%";
+  document.getElementById("st-avg").textContent   = avg + "点";
+  document.getElementById("st-max").textContent   = Math.max(...scores) + "点";
+  document.getElementById("st-min").textContent   = Math.min(...scores) + "点";
 }
 
 function renderResTable(examId) {
@@ -831,8 +831,8 @@ function renderResTable(examId) {
           ${s.studentId? `<br><span class="text-sm text-muted">${esc(s.studentId)}</span>`: ""}
         </td>
         <td>${dateStr}</td>
-        <td><strong>${s.correct} / ${s.total}</strong></td>
-        <td><strong>${s.score}%</strong></td>
+        <td><strong>${s.score ?? s.correct} / 60</strong></td>
+        <td><strong>${s.score ?? s.correct}点</strong></td>
         <td><span class="badge ${s.passed?"badge-pass":"badge-fail"}">${s.passed?"合格":"不合格"}</span></td>
         ${cells}
       </tr>`;
