@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>管理者パネル — 建施 模擬試験</title>
+  <title>管理者パネル — 土木施工 模擬試験</title>
   <link rel="stylesheet" href="../style.css">
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -189,7 +189,7 @@
 
 <!-- ========== TOPBAR ========== -->
 <div class="topbar" id="topbar">
-  <span class="topbar-title" id="topbar-title">📋 建施 模擬試験 管理システム</span>
+  <span class="topbar-title" id="topbar-title">📋 土木施工 模擬試験 管理システム</span>
   <div class="topbar-right" id="topbar-actions"></div>
 </div>
 
@@ -197,7 +197,7 @@
 <div id="pg-login">
   <div class="login-box">
     <div class="login-logo">管理者パネル</div>
-    <div class="login-sub">建施 模擬試験 管理システム</div>
+    <div class="login-sub">土木施工 模擬試験 管理システム</div>
     <form onsubmit="doLogin(event)">
       <input class="pin-input" type="password" id="inp-pin"
         placeholder="••••••" maxlength="10" autocomplete="off" inputmode="numeric">
@@ -245,11 +245,11 @@
       <div class="form-row">
         <div class="field">
           <label>問題数<span class="req">*</span></label>
-          <input type="number" id="c-qcount" value="72" min="1" max="200" oninput="rebuildKeyGrid()">
+          <input type="number" id="c-qcount" value="101" min="1" max="200" oninput="rebuildKeyGrid()">
         </div>
         <div class="field">
           <label>選択肢数<span class="req">*</span></label>
-          <input type="number" id="c-choices" value="5" min="2" max="10" oninput="rebuildKeyGrid()">
+          <input type="number" id="c-choices" value="4" min="2" max="10" oninput="rebuildKeyGrid()">
         </div>
       </div>
       <div class="form-row">
@@ -367,7 +367,7 @@
 // ---- 定数 ----
 const ADMIN_PASSWORD = "017663";
 const SITE_BASE = location.href.replace(/[^/]*(\?.*)?$/, "");
-const EXAM_CATEGORY = "kense1";
+const EXAM_CATEGORY = "doko1";
 
 // ---- 認証 ----
 function isAuthed() { return sessionStorage.getItem("admin_ok") === "1"; }
@@ -445,7 +445,7 @@ function showPage(page, param = "") {
 }
 
 function renderTopbar(page) {
-  document.getElementById("topbar-title").textContent = "📋 建施 模擬試験 管理システム";
+  document.getElementById("topbar-title").textContent = "📋 土木施工 模擬試験 管理システム";
   const act = document.getElementById("topbar-actions");
   act.innerHTML = "";
 
@@ -473,7 +473,7 @@ async function initDashboard() {
   try {
     const snap = await db.collection("exams").orderBy("createdAt","desc").get();
     const exams = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .filter(e => !e.category || e.category === EXAM_CATEGORY);
+      .filter(e => e.category === EXAM_CATEGORY);
 
     document.getElementById("db-loading").style.display = "none";
 
@@ -529,7 +529,7 @@ function buildExamCard(exam) {
   card.innerHTML = `
     <div class="exam-card-info">
       <div class="exam-card-title">${esc(exam.title)}</div>
-      <div class="exam-card-meta">${exam.questionCount||72} 問 ／ 選択肢 ${exam.choices||5} ／ 合格 ${exam.passingScore||60}% 以上 ・ ${dateStr}</div>
+      <div class="exam-card-meta">${exam.questionCount||101} 問 ／ 選択肢 ${exam.choices||4} ／ 合格 ${exam.passingScore||60}% 以上 ・ ${dateStr}</div>
     </div>
     <div class="toggle-wrap">
       <span class="toggle-lbl" id="tgl-lbl-${exam.id}">${exam.isActive ? "受付中" : "停止中"}</span>
@@ -598,8 +598,8 @@ async function initCreate(examId) {
     // リセット
     document.getElementById("c-title").value   = "";
     document.getElementById("c-folder").value  = "";
-    document.getElementById("c-qcount").value  = "72";
-    document.getElementById("c-choices").value = "5";
+    document.getElementById("c-qcount").value  = "101";
+    document.getElementById("c-choices").value = "4";
     document.getElementById("c-passing").value = "60";
     document.getElementById("c-active").checked= true;
     resetPdfZone();
@@ -610,8 +610,8 @@ async function initCreate(examId) {
 function populateCreateForm(data) {
   document.getElementById("c-title").value   = data.title   || "";
   document.getElementById("c-folder").value  = data.folder  || "";
-  document.getElementById("c-qcount").value  = data.questionCount || 72;
-  document.getElementById("c-choices").value = data.choices || 5;
+  document.getElementById("c-qcount").value  = data.questionCount || 101;
+  document.getElementById("c-choices").value = data.choices || 4;
   document.getElementById("c-passing").value = data.passingScore || 60;
   document.getElementById("c-active").checked = !!data.isActive;
   setPdfZone(data.pdfUrl || "");
@@ -619,8 +619,8 @@ function populateCreateForm(data) {
 }
 
 function rebuildKeyGrid(existingKey = {}) {
-  const qcount  = parseInt(document.getElementById("c-qcount").value)  || 72;
-  const choices = parseInt(document.getElementById("c-choices").value) || 5;
+  const qcount  = parseInt(document.getElementById("c-qcount").value)  || 101;
+  const choices = parseInt(document.getElementById("c-choices").value) || 4;
   const grid    = document.getElementById("key-grid");
   const half    = Math.ceil(qcount / 2);
   grid.innerHTML = "";
@@ -670,7 +670,7 @@ function rebuildKeyGrid(existingKey = {}) {
 }
 
 function updateKeyCounter() {
-  const qcount = parseInt(document.getElementById("c-qcount").value) || 72;
+  const qcount = parseInt(document.getElementById("c-qcount").value) || 101;
   let filled = 0;
   for (let q = 1; q <= qcount; q++) {
     if (document.querySelector(`input[name="key_q${q}"]:checked`)) filled++;
@@ -773,7 +773,7 @@ async function initResults(examId) {
 
     document.getElementById("res-title").textContent = resExamData.title;
     document.getElementById("res-meta").textContent  =
-      `全 ${resExamData.questionCount||72} 問 ／ 選択肢 ${resExamData.choices||5} ／ 合格ライン ${resExamData.passingScore||60}% 以上`;
+      `全 ${resExamData.questionCount||101} 問 ／ 選択肢 ${resExamData.choices||4} ／ 合格ライン ${resExamData.passingScore||60}% 以上`;
 
     const subsSnap = await db.collection("submissions")
       .where("examId","==", examId)
@@ -808,7 +808,7 @@ function renderResTable(examId) {
   if (!resSubmissions.length) {
     document.getElementById("res-empty").style.display = "block"; return;
   }
-  const qcount = resExamData.questionCount || 72;
+  const qcount = resExamData.questionCount || 101;
 
   let qHdr = "";
   for (let q = 1; q <= qcount; q++) qHdr += `<th>問${q}</th>`;
@@ -834,7 +834,7 @@ function renderResTable(examId) {
           ${s.studentId? `<br><span class="text-sm text-muted">${esc(s.studentId)}</span>`: ""}
         </td>
         <td>${dateStr}</td>
-        <td><strong>${s.score ?? s.correct} / 60</strong></td>
+        <td><strong>${s.score ?? s.correct} / 70</strong></td>
         <td><strong>${s.score ?? s.correct}点</strong></td>
         <td><span class="badge ${s.passed?"badge-pass":"badge-fail"}">${s.passed?"合格":"不合格"}</span></td>
         ${cells}
@@ -855,8 +855,8 @@ function renderResTable(examId) {
 
 function showDetail(idx) {
   const s      = resSubmissions[idx];
-  const qcount = resExamData.questionCount || 72;
-  const choices= resExamData.choices || 5;
+  const qcount = resExamData.questionCount || 101;
+  const choices= resExamData.choices || 4;
   const key    = resExamData.answerKey || {};
 
   document.getElementById("modal-name-lbl").textContent =
@@ -864,31 +864,29 @@ function showDetail(idx) {
 
   const sn = document.getElementById("modal-score-num");
 
-  // 新形式（score=得点数/60）と旧形式（score=パーセンテージ）の両対応
   const isNewFormat = (s.appScore !== undefined);
   const totalPts    = isNewFormat ? s.score : null;
   const appPts      = isNewFormat ? s.appScore : null;
-  const pct         = isNewFormat ? Math.round(s.score / 60 * 100) : s.score;
+  const pct         = isNewFormat ? Math.round(s.score / 70 * 100) : s.score;
 
   sn.textContent = pct + "%";
   sn.className   = "detail-score-num " + (s.passed ? "pass" : "fail");
 
-  // 合否 + 不合格理由
   let subHtml = "";
   if (isNewFormat) {
-    const totalOk  = totalPts >= 36;
-    const appOk    = appPts >= 6;
+    const totalOk  = totalPts >= 42;
+    const appOk    = appPts >= 9;
     const verdict  = s.passed ? "✅ 合格" : "❌ 不合格";
-    subHtml += `<div style="margin-bottom:6px"><strong>${totalPts} / 60点</strong>　${verdict}</div>`;
+    subHtml += `<div style="margin-bottom:6px"><strong>${totalPts} / 70点</strong>　${verdict}</div>`;
     if (!s.passed) {
       const reasons = [];
-      if (!totalOk) reasons.push(`合計得点不足（${totalPts}/60点、合格ライン36点以上）`);
-      if (!appOk)   reasons.push(`応用能力問題不足（${appPts}/10点、合格条件6点以上）`);
+      if (!totalOk) reasons.push(`合計得点不足（${totalPts}/70点、合格ライン42点以上）`);
+      if (!appOk)   reasons.push(`応用能力問題不足（${appPts}/15点、合格条件9点以上）`);
       subHtml += `<div style="color:var(--danger);font-size:0.82rem">
         ⚠️ 不合格理由：${reasons.join("　／　")}
       </div>`;
     } else {
-      subHtml += `<div style="color:var(--text-muted);font-size:0.82rem">応用能力：${appPts}/10点</div>`;
+      subHtml += `<div style="color:var(--text-muted);font-size:0.82rem">応用能力：${appPts}/15点</div>`;
     }
   } else {
     subHtml = `${s.passed ? "✅ 合格" : "❌ 不合格"}`;
@@ -901,8 +899,7 @@ function showDetail(idx) {
     const ans    = r ? r.answer : null;
     const isOk   = r ? r.correct : false;
     const correct= parseInt(key[q] || key[String(q)]);
-    // 問51〜60は5択、それ以外は4択
-    const qChoices = (q >= 51 && q <= 60) ? 5 : 4;
+    const qChoices = choices;
 
     let choicesHtml = "";
     for (let c = 1; c <= qChoices; c++) {
@@ -928,7 +925,7 @@ function showDetail(idx) {
 // CSV エクスポート
 function exportCSV() {
   if (!resSubmissions.length) { showToast("データがありません"); return; }
-  const qcount = resExamData.questionCount || 72;
+  const qcount = resExamData.questionCount || 101;
   const hdr = ["#","氏名","企業名","受験番号","送信日時","正解数","得点(%)","合否"];
   for (let q = 1; q <= qcount; q++) hdr.push(`問${q}`);
 
