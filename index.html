@@ -237,6 +237,7 @@ function doLogin() {
   const pw = document.getElementById("pw-input").value;
   if (pw === PORTAL_PASSWORD) {
     sessionStorage.setItem(SESSION_KEY, "1");
+    sessionStorage.setItem("admin_ok", "1");
     showPortal();
   } else {
     document.getElementById("pw-error").textContent = "パスワードが違います";
@@ -247,6 +248,7 @@ function doLogin() {
 
 function doLogout() {
   sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem("admin_ok");
   document.getElementById("pg-portal").style.display = "none";
   document.getElementById("pg-login").style.display  = "flex";
   document.getElementById("pw-input").value = "";
