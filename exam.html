@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>解答フォーム</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <style>
+    .exam-header {
+      background: var(--primary);
+      color: #fff;
+      padding: 20px 20px 16px;
+      text-align: center;
+      position: sticky; top: 0; z-index: 40;
+    }
+    .exam-header h1 { font-size: 1.1rem; margin-bottom: 2px; }
+    .exam-header p  { font-size: 0.8rem; opacity: 0.8; }
+    .progress-bar-wrap {
+      background: rgba(255,255,255,0.2);
+      border-radius: 100px; height: 5px;
+      margin-top: 10px; overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%; background: #fff;
+      border-radius: 100px; transition: width 0.3s; width: 0%;
+    }
+    .progress-label { font-size: 0.76rem; opacity: 0.85; margin-top: 4px; }
+
+    .info-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    }
+    @media(max-width:480px){ .info-grid{ grid-template-columns: 1fr; } }
+
+    /* ── セクションヘッダー ── */
+    .exam-sec-head {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 6px;
+      padding: 9px 14px;
+      background: var(--primary-bg);
+      border-left: 3px solid var(--primary-lt);
+      border-radius: var(--radius);
+      margin: 18px 0 8px;
+    }
+    .exam-sec-head:first-child { margin-top: 0; }
+    .sec-name { font-size: 0.82rem; font-weight: 700; color: var(--primary); }
+    .sec-rule { font-size: 0.73rem; color: var(--text-muted); margin-top: 1px; }
+    .sec-badge {
+      font-size: 0.76rem; font-weight: 700;
+      padding: 3px 10px; border-radius: 100px;
+      background: var(--border); color: var(--text-muted);
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .sec-badge.ok   { background: var(--success-bg); color: var(--success); }
+    .sec-badge.over { background: var(--danger-bg);  color: var(--danger); }
+
+    .submit-area {
+      background: #fff; border-top: 1px solid var(--border);
+      padding: 14px 20px; position: sticky; bottom: 0;
+      display: flex; gap: 12px; align-items: center;
+      justify-content: flex-end; flex-wrap: wrap; z-index: 40;
+    }
+    .submit-area .answered-count {
+      font-size: 0.85rem; color: var(--text-muted); flex: 1;
+    }
+
+    /* ── 結果ヘッダー ── */
+    .result-header {
+      background: var(--primary); color: #fff;
+      padding: 36px 20px 28px; text-align: center;
+    }
+    .result-score-num { font-size: 4.5rem; font-weight: 800; line-height: 1; }
+    .result-score-unit { font-size: 1.05rem; opacity: 0.7; margin-top: 2px; }
+    .verdict-badge {
+      display: inline-block; margin-top: 16px;
+      padding: 6px 28px; border-radius: 100px;
+      font-size: 1rem; font-weight: 700;
+    }
+    .verdict-pass { background: #fff; color: var(--success); }
+    .verdict-fail { background: rgba(255,255,255,0.15); color: #fff;
+      border: 2px solid rgba(255,255,255,0.6); }
+
+    /* ── 結果テーブル ── */
+    .res-tbl { width: 100%; border-collapse: collapse; font-size: 0.84rem; min-width: 320px; }
+    .res-tbl th { color: var(--text-muted); font-size: 0.78rem; padding: 8px 6px;
+      border-bottom: 2px solid var(--border); text-align: center; }
+    .res-tbl th:first-child { text-align: left; }
+    .res-tbl td { padding: 8px 6px; border-bottom: 1px solid var(--border); text-align: center; }
+    .res-tbl td:first-child { text-align: left; }
+    .res-tbl tfoot td { font-weight: 700; border-top: 2px solid var(--border); border-bottom: none; }
+    .penalty-note { font-size: 0.73rem; color: var(--danger); }
+
+    .closed-screen {
+      display: none; text-align: center; padding: 80px 20px; color: var(--text-muted);
+    }
+
+    /* ── 解答確認グリッド（結果画面） ── */
+    .answer-row.row-correct { background: var(--success-bg); border-color: #a5d6a7; }
+    .answer-row.row-wrong   { background: var(--danger-bg);  border-color: #ef9a9a; }
+    .row-correct-label { font-size: 0.75rem; color: var(--success); font-weight: 700; margin-left: auto; white-space: nowrap; }
+    .row-wrong-label   { font-size: 0.75rem; color: var(--danger);  font-weight: 700; margin-left: auto; white-space: nowrap; }
+  </style>
+</head>
+<body>
+
+<!-- ローディング -->
+<div id="loading-screen" class="loading-wrap">
+  <div class="spinner"></div>
+  <p class="text-sm mt-8">テスト情報を読み込んでいます...</p>
+</div>
+
+<!-- 受付停止 -->
+<div id="closed-screen" class="closed-screen">
+  <div style="font-size:3rem;margin-bottom:12px">🔒</div>
+  <h2 style="color:var(--text);margin-bottom:8px">現在このテストは受付停止中です</h2>
+  <p class="text-sm">管理者にお問い合わせください。</p>
+</div>
+
+<!-- ══ メインフォーム ══ -->
+<div id="main-screen" style="display:none">
+  <div class="exam-header">
+    <h1 id="exam-title">—</h1>
+    <p>1級建築施工管理技士 一次試験　全72問・解答数60問</p>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="prog-bar"></div>
+    </div>
+    <div class="progress-label" id="prog-label">0 / 60 問 回答済み</div>
+  </div>
+
+  <div class="page-wrap" style="padding-top:24px;padding-bottom:80px">
+    <form id="exam-form">
+      <!-- 受験者情報 -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="section-label" style="margin-bottom:16px">受験者情報</div>
+        <div class="info-grid">
+          <div class="field">
+            <label>氏名<span class="req">*</span></label>
+            <input type="text" id="inp-name" placeholder="例：山田 太郎" required>
+          </div>
+          <div class="field">
+            <label>企業名</label>
+            <input type="text" id="inp-company" placeholder="例：○○建設株式会社">
+          </div>
+          <div class="field">
+            <label>受験番号</label>
+            <input type="text" id="inp-sid" placeholder="例：2024-001">
+          </div>
+        </div>
+      </div>
+
+      <!-- 解答欄 -->
+      <div class="card">
+        <div class="section-label" style="margin-bottom:4px">解答欄</div>
+        <p class="text-sm text-muted" style="margin-bottom:16px">
+          ★選択問題は指定数を超えて回答すると超過分が減点されます。
+        </p>
+        <div id="answer-sections"></div>
+      </div>
+    </form>
+  </div>
+
+  <div class="submit-area">
+    <span class="answered-count" id="answered-count">0 / 60 問 回答済み</span>
+    <button type="button" class="btn btn-primary btn-lg" id="submit-btn" onclick="submitAnswers()">
+      解答を送信する
+    </button>
+  </div>
+</div>
+
+<!-- ══ 結果画面 ══ -->
+<div id="result-screen" style="display:none">
+  <div class="result-header">
+    <p id="res-name" style="font-size:0.88rem;opacity:0.72;margin-bottom:14px"></p>
+    <div class="result-score-num" id="res-pct">--%</div>
+    <div style="font-size:0.95rem;opacity:0.8;margin-top:6px">
+      <span id="res-score">--</span> 問正解 ／ 全60問
+    </div>
+    <div><span id="res-verdict" class="verdict-badge">—</span></div>
+    <p style="font-size:0.78rem;opacity:0.6;margin-top:14px">お疲れさまでした。</p>
+  </div>
+
+  <div class="page-wrap" style="padding-top:20px;padding-bottom:60px">
+
+    <!-- 不合格理由（どちらかが未達の場合） -->
+    <div id="res-fail-reason" style="display:none" class="card" style="margin-bottom:16px">
+      <div style="background:var(--danger-bg);border-radius:var(--radius);padding:12px 16px;color:var(--danger);font-size:0.85rem" id="res-fail-reason-inner"></div>
+    </div>
+
+    <!-- 応用能力 -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-label" style="margin-bottom:12px">応用能力問題（問51〜60）</div>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <span style="font-size:2.4rem;font-weight:800;color:var(--primary)" id="res-app-score">--</span>
+        <span class="text-sm text-muted">/ 10 点　（合格条件：6点以上）</span>
+        <span id="res-app-badge" style="margin-left:auto"></span>
+      </div>
+    </div>
+
+    <!-- セクション別集計 -->
+    <div class="card" style="margin-bottom:16px;overflow-x:auto">
+      <div class="section-label" style="margin-bottom:12px">セクション別集計</div>
+      <table class="res-tbl">
+        <thead>
+          <tr>
+            <th style="text-align:left">分野</th>
+            <th>解答</th>
+            <th>正答</th>
+            <th>得点</th>
+          </tr>
+        </thead>
+        <tbody id="res-tbody"></tbody>
+        <tfoot>
+          <tr>
+            <td>合計</td>
+            <td id="res-sum-ans" style="text-align:center"></td>
+            <td id="res-sum-cor" style="text-align:center"></td>
+            <td id="res-sum-pts" style="text-align:center;color:var(--primary)"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <!-- 解答確認 -->
+    <div class="card">
+      <div class="section-label" style="margin-bottom:8px">解答確認</div>
+      <p class="text-sm text-muted" style="margin-bottom:14px">
+        <span style="display:inline-block;width:13px;height:13px;background:var(--success);border-radius:3px;vertical-align:middle;margin-right:3px"></span>正答
+        <span style="display:inline-block;width:13px;height:13px;background:var(--danger);border-radius:3px;vertical-align:middle;margin-right:3px"></span>誤答
+        <span style="display:inline-block;width:13px;height:13px;border:2px dashed var(--success);border-radius:3px;vertical-align:middle;margin-right:3px"></span>正答番号
+      </p>
+      <div id="res-review"></div>
+    </div>
+  </div>
+
+  <div id="pdf-countdown" style="display:none;text-align:center;padding:16px;color:var(--primary);font-size:0.88rem">
+    回答例を表示しています...
+  </div>
+</div>
+
+<!-- 回答例PDF -->
+<div id="pdf-section" style="display:none">
+  <div style="background:var(--primary);color:#fff;padding:14px 20px;text-align:center">
+    <div style="font-weight:700;font-size:1rem">回答例</div>
+  </div>
+  <iframe id="pdf-frame" src="" style="width:100%;height:88vh;border:none;display:block"></iframe>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════
+//  1級建築施工管理技士 一次試験 セクション定義
+// ══════════════════════════════════════════════════
+const EXAM_SECTIONS = [
+  { label:"建築学一般",            start: 1,  end: 6,  required: 6,  mandatory:true,  choices:4 },
+  { label:"建築学一般（選択）",    start: 7,  end:15,  required: 6,  mandatory:false, choices:4 },
+  { label:"施工共通",              start:16,  end:20,  required: 5,  mandatory:true,  choices:4 },
+  { label:"躯体工事（選択）",      start:21,  end:30,  required: 8,  mandatory:false, choices:4 },
+  { label:"仕上げ工事（選択）",    start:31,  end:40,  required: 7,  mandatory:false, choices:4 },
+  { label:"施工管理法",            start:41,  end:44,  required: 4,  mandatory:true,  choices:4 },
+  { label:"施工管理法",            start:45,  end:50,  required: 6,  mandatory:true,  choices:4 },
+  { label:"施工管理法（応用能力）",start:51,  end:60,  required:10,  mandatory:true,  choices:5 },
+  { label:"法規（選択）",          start:61,  end:72,  required: 8,  mandatory:false, choices:4 },
+];
+const TOTAL_REQUIRED = 60;
+const PASSING_SCORE  = 36;
+const APP_SEC_IDX    = 7;   // 応用能力セクションのインデックス
+const APP_PASSING    = 6;
+
+const params  = new URLSearchParams(location.search);
+const examId  = params.get("id");
+let examData  = null;
+let resultCache = {};  // 採点結果キャッシュ
+
+if (!examId) {
+  showError("URLにテストIDが含まれていません。");
+} else {
+  loadExam();
+}
+
+// ── 読み込み ──
+async function loadExam() {
+  try {
+    const snap = await db.collection("exams").doc(examId).get();
+    if (!snap.exists) { showError("テストが見つかりません。URLを確認してください。"); return; }
+    examData = snap.data();
+
+    if (!examData.isActive) {
+      document.getElementById("loading-screen").style.display = "none";
+      document.getElementById("closed-screen").style.display  = "block";
+      return;
+    }
+
+    document.title = examData.title + " - 解答フォーム";
+    document.getElementById("exam-title").textContent = examData.title;
+    buildGrid();
+
+    document.getElementById("loading-screen").style.display = "none";
+    document.getElementById("main-screen").style.display    = "block";
+    updateProgress();
+  } catch(e) {
+    showError("読み込みに失敗しました：" + e.message);
+  }
+}
+
+// ── グリッド構築 ──
+function buildGrid() {
+  const container = document.getElementById("answer-sections");
+  container.innerHTML = "";
+
+  EXAM_SECTIONS.forEach((sec, idx) => {
+    // セクションヘッダー
+    const head = document.createElement("div");
+    head.className = "exam-sec-head";
+    const ruleText = sec.mandatory
+      ? "全問解答"
+      : `${sec.required}問選択（${sec.end - sec.start + 1}問中）`;
+    head.innerHTML = `
+      <div>
+        <div class="sec-name">${sec.label}　問${sec.start}〜${sec.end}</div>
+        <div class="sec-rule">${ruleText}</div>
+      </div>
+      <span class="sec-badge" id="sec-badge-${idx}">0 / ${sec.required}</span>
+    `;
+    container.appendChild(head);
+
+    // 2列グリッド
+    const grid = document.createElement("div");
+    grid.className = "answer-grid";
+    const col1 = document.createElement("div"); col1.className = "answer-col";
+    const col2 = document.createElement("div"); col2.className = "answer-col";
+
+    const qs   = [];
+    for (let q = sec.start; q <= sec.end; q++) qs.push(q);
+    const half = Math.ceil(qs.length / 2);
+
+    qs.forEach((q, i) => {
+      const row = document.createElement("div");
+      row.className = "answer-row";
+      row.dataset.q = q;
+
+      const qn = document.createElement("span");
+      qn.className = "q-num";
+      qn.textContent = `問${q}`;
+      row.appendChild(qn);
+
+      const cg = document.createElement("div");
+      cg.className = "choice-group";
+      for (let c = 1; c <= sec.choices; c++) {
+        const id = `q${q}_c${c}`;
+        const radio = document.createElement("input");
+        radio.type = "radio"; radio.name = `q${q}`; radio.value = c; radio.id = id;
+        const lbl = document.createElement("label");
+        lbl.htmlFor = id; lbl.textContent = c;
+        lbl.addEventListener("click", function(e) {
+          e.preventDefault();
+          if (radio.checked) {
+            radio.checked = false;
+          } else {
+            document.querySelectorAll(`input[name="q${q}"]`)
+              .forEach(r => r.checked = false);
+            radio.checked = true;
+          }
+          row.classList.remove("unanswered");
+          updateProgress();
+        });
+        cg.appendChild(radio); cg.appendChild(lbl);
+      }
+      row.appendChild(cg);
+
+      if (i < half) col1.appendChild(row);
+      else          col2.appendChild(row);
+    });
+
+    grid.appendChild(col1);
+    grid.appendChild(col2);
+    container.appendChild(grid);
+  });
+}
+
+// ── 進捗更新 ──
+function updateProgress() {
+  let total = 0;
+  EXAM_SECTIONS.forEach((sec, idx) => {
+    let count = 0;
+    for (let q = sec.start; q <= sec.end; q++) {
+      if (document.querySelector(`input[name="q${q}"]:checked`)) count++;
+    }
+    const badge = document.getElementById(`sec-badge-${idx}`);
+    if (badge) {
+      badge.textContent = `${count} / ${sec.required}`;
+      badge.className = "sec-badge";
+      if (!sec.mandatory && count > sec.required) badge.classList.add("over");
+      else if (count >= sec.required)              badge.classList.add("ok");
+    }
+    total += count;
+  });
+  const pct = Math.min(100, Math.round(total / TOTAL_REQUIRED * 100));
+  document.getElementById("prog-bar").style.width           = pct + "%";
+  document.getElementById("prog-label").textContent         = `${total} / ${TOTAL_REQUIRED} 問 回答済み`;
+  document.getElementById("answered-count").textContent     = `${total} / ${TOTAL_REQUIRED} 問 回答済み`;
+}
+
+// ── 送信 ──
+async function submitAnswers() {
+  const name    = document.getElementById("inp-name").value.trim();
+  const company = document.getElementById("inp-company").value.trim();
+  const sid     = document.getElementById("inp-sid").value.trim();
+
+  if (!name) { showToast("氏名を入力してください"); return; }
+
+  // 必須セクション未回答チェック
+  const unans = [];
+  EXAM_SECTIONS.forEach(sec => {
+    if (!sec.mandatory) return;
+    for (let q = sec.start; q <= sec.end; q++) {
+      if (!document.querySelector(`input[name="q${q}"]:checked`)) {
+        document.querySelector(`.answer-row[data-q="${q}"]`)?.classList.add("unanswered");
+        unans.push(q);
+      }
+    }
+  });
+  if (unans.length) {
+    showToast(`未回答があります：問${unans[0]} など（全問解答セクション）`);
+    document.querySelector(`.answer-row[data-q="${unans[0]}"]`)
+      ?.scrollIntoView({ behavior:"smooth", block:"center" });
+    return;
+  }
+
+  // 選択セクション確認
+  const issues = [];
+  EXAM_SECTIONS.forEach(sec => {
+    if (sec.mandatory) return;
+    let count = 0;
+    for (let q = sec.start; q <= sec.end; q++) {
+      if (document.querySelector(`input[name="q${q}"]:checked`)) count++;
+    }
+    if (count > sec.required) {
+      issues.push(`・${sec.label}（問${sec.start}〜${sec.end}）：${count}問回答 → ${count - sec.required}問超過 ⇒ 減点`);
+    } else if (count < sec.required) {
+      issues.push(`・${sec.label}（問${sec.start}〜${sec.end}）：${count}問回答 → ${sec.required - count}問不足`);
+    }
+  });
+  if (issues.length) {
+    if (!confirm(`以下の選択問題に注意があります。\n\n${issues.join("\n")}\n\nこのまま送信しますか？`)) return;
+  }
+
+  const btn = document.getElementById("submit-btn");
+  btn.disabled = true; btn.textContent = "送信中...";
+
+  // 採点
+  const key    = examData.answerKey || {};
+  const answers  = {};
+  const results  = {};
+  let totalCorrect = 0;
+  let appCorrect   = 0;
+  const sectionResults = [];
+
+  EXAM_SECTIONS.forEach((sec, idx) => {
+    let answered = 0, correct = 0;
+    for (let q = sec.start; q <= sec.end; q++) {
+      const sel = document.querySelector(`input[name="q${q}"]:checked`);
+      const myAns = sel ? parseInt(sel.value) : null;
+      const corAns = parseInt(key[q] ?? key[String(q)]);
+      const isOk = myAns !== null && myAns === corAns;
+      if (myAns !== null) { answered++; if (isOk) correct++; }
+      answers[q] = myAns;
+      results[q] = { answer: myAns, correct: isOk };
+    }
+    const penalty = (!sec.mandatory && answered > sec.required) ? answered - sec.required : 0;
+    const effectiveCorrect = Math.max(0, correct - penalty);
+    if (idx === APP_SEC_IDX) appCorrect = effectiveCorrect;
+    totalCorrect += effectiveCorrect;
+    sectionResults.push({ ...sec, answered, correct, penalty, effectiveCorrect });
+  });
+
+  resultCache = results;
+  const passed = totalCorrect >= PASSING_SCORE && appCorrect >= APP_PASSING;
+
+  try {
+    await db.collection("submissions").add({
+      examId, examTitle: examData.title,
+      name, company, studentId: sid,
+      answers, results,
+      score: totalCorrect, appScore: appCorrect, passed,
+      submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    document.getElementById("main-screen").style.display = "none";
+    showResults({ name, totalCorrect, appCorrect, passed, sectionResults });
+  } catch(e) {
+    btn.disabled = false; btn.textContent = "解答を送信する";
+    showToast("送信に失敗しました：" + e.message);
+  }
+}
+
+// ── 結果表示 ──
+function showResults({ name, totalCorrect, appCorrect, passed, sectionResults }) {
+  const screen = document.getElementById("result-screen");
+  screen.style.display = "block";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+
+  const pct = Math.round(totalCorrect / TOTAL_REQUIRED * 100);
+  document.getElementById("res-name").textContent  = `${name} さん`;
+  document.getElementById("res-pct").textContent   = `${pct}%`;
+  document.getElementById("res-score").textContent = totalCorrect;
+
+  const vEl = document.getElementById("res-verdict");
+  vEl.textContent = passed ? "合　格" : "不合格";
+  vEl.className   = "verdict-badge " + (passed ? "verdict-pass" : "verdict-fail");
+
+  // 不合格理由
+  const appPassed  = appCorrect >= APP_PASSING;
+  const totalOk    = totalCorrect >= PASSING_SCORE;
+  const reasonDiv  = document.getElementById("res-fail-reason");
+  const reasonInner= document.getElementById("res-fail-reason-inner");
+  if (!passed) {
+    reasonDiv.style.display = "block";
+    const reasons = [];
+    if (!totalOk)   reasons.push(`合計得点 ${totalCorrect}/60点（合格ライン：${PASSING_SCORE}点以上）`);
+    if (!appPassed) reasons.push(`応用能力問題 ${appCorrect}/10点（合格条件：${APP_PASSING}点以上）`);
+    reasonInner.innerHTML = "⚠️ 不合格理由：<br>" + reasons.map(r => `・${r}`).join("<br>");
+  } else {
+    reasonDiv.style.display = "none";
+  }
+
+  // 応用能力
+  document.getElementById("res-app-score").textContent = appCorrect;
+  document.getElementById("res-app-badge").innerHTML =
+    `<span class="badge ${appPassed ? "badge-pass" : "badge-fail"}">${appPassed ? "合格" : "不合格"}</span>`;
+
+  // セクション別テーブル
+  const tbody = document.getElementById("res-tbody");
+  tbody.innerHTML = "";
+  let sumAns = 0, sumCor = 0, sumPts = 0;
+  sectionResults.forEach(s => {
+    const tr = document.createElement("tr");
+    const penNote = s.penalty > 0 ? `<br><span class="penalty-note">超過 −${s.penalty}</span>` : "";
+    const ruleLabel = s.mandatory ? "全問" : `${s.required}問選択`;
+    tr.innerHTML = `
+      <td>${s.label}<br><span style="font-size:0.73rem;color:var(--text-muted)">問${s.start}〜${s.end}　${ruleLabel}</span></td>
+      <td>${s.answered}</td>
+      <td>${s.correct}${penNote}</td>
+      <td style="font-weight:700;color:var(--primary)">${s.effectiveCorrect}</td>
+    `;
+    tbody.appendChild(tr);
+    sumAns += s.answered; sumCor += s.correct; sumPts += s.effectiveCorrect;
+  });
+  document.getElementById("res-sum-ans").textContent = sumAns;
+  document.getElementById("res-sum-cor").textContent = sumCor;
+  document.getElementById("res-sum-pts").textContent = `${sumPts} 点`;
+
+  // 解答確認グリッド
+  buildReviewGrid(sectionResults);
+
+  // PDF
+  if (examData.pdfUrl) {
+    document.getElementById("pdf-countdown").style.display = "block";
+    setTimeout(() => {
+      document.getElementById("pdf-frame").src = examData.pdfUrl;
+      document.getElementById("pdf-section").style.display = "block";
+      document.getElementById("pdf-section").scrollIntoView({ behavior:"smooth" });
+    }, 3000);
+  }
+}
+
+// ── 解答確認グリッド ──
+function buildReviewGrid(sectionResults) {
+  const container = document.getElementById("res-review");
+  container.innerHTML = "";
+  const key = examData.answerKey || {};
+
+  sectionResults.forEach(s => {
+    const secHead = document.createElement("div");
+    secHead.style.cssText = "font-size:0.78rem;font-weight:700;color:var(--primary);margin:14px 0 6px;padding-left:9px;border-left:3px solid var(--primary-lt)";
+    secHead.textContent = `${s.label}　問${s.start}〜${s.end}`;
+    container.appendChild(secHead);
+
+    const grid = document.createElement("div");
+    grid.className = "answer-grid";
+    const col1 = document.createElement("div"); col1.className = "answer-col";
+    const col2 = document.createElement("div"); col2.className = "answer-col";
+
+    const qs = [];
+    for (let q = s.start; q <= s.end; q++) qs.push(q);
+    const half = Math.ceil(qs.length / 2);
+
+    qs.forEach((q, i) => {
+      const corAns = parseInt(key[q] ?? key[String(q)]);
+      const cached = resultCache[q] || { answer: null, correct: false };
+      const myAns  = cached.answer;
+
+      const row = document.createElement("div");
+      row.className = "answer-row";
+      if (myAns !== null && cached.correct)  row.classList.add("row-correct");
+      if (myAns !== null && !cached.correct) row.classList.add("row-wrong");
+
+      const qn = document.createElement("span");
+      qn.className = "q-num";
+      qn.textContent = `問${q}`;
+      row.appendChild(qn);
+
+      const cg = document.createElement("div");
+      cg.className = "choice-group";
+
+      for (let c = 1; c <= s.choices; c++) {
+        const lbl = document.createElement("label");
+        lbl.textContent = c;
+        if (myAns === c && cached.correct) {
+          lbl.className = "choice-label-correct";
+        } else if (myAns === c && !cached.correct) {
+          lbl.className = "choice-label-wrong";
+        } else if (corAns === c) {
+          lbl.className = "choice-label-answer-hint";
+        }
+        cg.appendChild(lbl);
+      }
+      row.appendChild(cg);
+
+      // 誤答行に「正解：X」ラベル
+      if (myAns !== null && !cached.correct && corAns) {
+        const hint = document.createElement("span");
+        hint.className = "row-wrong-label";
+        hint.textContent = `正解：${corAns}`;
+        row.appendChild(hint);
+      }
+      // 未回答行
+      if (myAns === null) {
+        const unl = document.createElement("span");
+        unl.style.cssText = "font-size:0.73rem;color:var(--text-muted);margin-left:auto";
+        unl.textContent = "未回答";
+        row.appendChild(unl);
+      }
+
+      if (i < half) col1.appendChild(row);
+      else          col2.appendChild(row);
+    });
+
+    grid.appendChild(col1);
+    grid.appendChild(col2);
+    container.appendChild(grid);
+  });
+}
+
+function showError(msg) {
+  document.getElementById("loading-screen").innerHTML =
+    `<div style="text-align:center;padding:60px 20px;color:var(--danger)">
+      <div style="font-size:2rem;margin-bottom:12px">⚠️</div><div>${msg}</div>
+    </div>`;
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove("show"), 3200);
+}
+</script>
+</body>
+</html>
