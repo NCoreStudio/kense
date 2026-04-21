@@ -86,7 +86,7 @@
     @media(max-width:540px){ .form-row{ grid-template-columns: 1fr; } }
 
     .folder-wrap { position: relative; }
-    #folder-suggestions {
+    #folder-suggestions, #copy-folder-suggestions {
       position: absolute; top: 100%; left: 0; right: 0;
       background: #fff; border: 1.5px solid var(--border);
       border-radius: 0 0 var(--radius) var(--radius);
@@ -328,6 +328,32 @@
   </div>
 </div>
 
+<!-- ========== コピーモーダル ========== -->
+<div class="modal-overlay" id="copy-modal">
+  <div class="modal-box" style="max-width:480px">
+    <button class="modal-close" onclick="closeModal('copy-modal')">✕</button>
+    <div class="section-label" style="margin-bottom:8px">テストをコピー</div>
+    <p class="text-sm text-muted" style="margin-bottom:16px">
+      テスト設定・正答キーのみコピーします。採点結果はコピーされません。<br>
+      コピー後は<strong>停止状態</strong>で作成されます。
+    </p>
+    <div class="field" style="margin-bottom:12px">
+      <label>新しいテスト名<span class="req">*</span></label>
+      <input type="text" id="copy-title" placeholder="例：模擬①（△△社）">
+    </div>
+    <div class="field folder-wrap" style="margin-bottom:20px">
+      <label>フォルダ（分類）<span class="req">*</span></label>
+      <input type="text" id="copy-folder" placeholder="例：2026年度" autocomplete="off"
+        oninput="onCopyFolderInput()" onfocus="onCopyFolderInput()" onblur="hideCopySug()">
+      <div id="copy-folder-suggestions"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('copy-modal')">キャンセル</button>
+      <button class="btn btn-primary" id="copy-confirm-btn" onclick="confirmDuplicate()">コピーして作成</button>
+    </div>
+  </div>
+</div>
+
 <!-- ========== 詳細モーダル ========== -->
 <div class="modal-overlay" id="detail-modal">
   <div class="modal-box">
@@ -465,6 +491,8 @@ function renderTopbar(page) {
 // ================================================================
 //  DASHBOARD
 // ================================================================
+const examCache = {};
+
 async function initDashboard() {
   document.getElementById("db-loading").style.display = "block";
   document.getElementById("db-folder-list").innerHTML = "";
@@ -474,6 +502,11 @@ async function initDashboard() {
     const snap = await db.collection("exams").orderBy("createdAt","desc").get();
     const exams = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       .filter(e => !e.category || e.category === EXAM_CATEGORY);
+
+    // フォルダ候補をダッシュボードでも更新（コピーモーダル用）
+    const fset = new Set();
+    exams.forEach(e => { if (e.folder) fset.add(e.folder); });
+    existingFolders = [...fset];
 
     document.getElementById("db-loading").style.display = "none";
 
@@ -522,6 +555,7 @@ function buildFolderSection(folderName, exams) {
 }
 
 function buildExamCard(exam) {
+  examCache[exam.id] = exam;
   const card = document.createElement("div");
   card.className = "exam-card";
   const dt = exam.createdAt?.toDate ? exam.createdAt.toDate() : new Date();
@@ -540,6 +574,7 @@ function buildExamCard(exam) {
       <button class="btn btn-ghost btn-sm" onclick="showUrlModal('${exam.id}')">URL</button>
       <button class="btn btn-primary btn-sm" onclick="navigate('results','${exam.id}')">採点結果</button>
       <button class="btn btn-neutral btn-sm" onclick="navigate('create','${exam.id}')">編集</button>
+      <button class="btn btn-neutral btn-sm" onclick="openCopyModal('${exam.id}')">コピー</button>
       <button class="btn btn-danger btn-sm" onclick="deleteExam('${exam.id}','${esc(exam.title).replace(/'/g,"\\'")}')">削除</button>
     </div>`;
   return card;
@@ -563,6 +598,77 @@ async function deleteExam(examId, title) {
     showToast("削除しました");
     initDashboard();
   } catch(e) { showToast("削除失敗：" + e.message); }
+}
+
+// ================================================================
+//  COPY / DUPLICATE
+// ================================================================
+let copyingExamId = null;
+
+function openCopyModal(examId) {
+  const exam = examCache[examId];
+  if (!exam) { showToast("データが見つかりません"); return; }
+  copyingExamId = examId;
+  document.getElementById("copy-title").value  = exam.title + "（コピー）";
+  document.getElementById("copy-folder").value = exam.folder || "";
+  document.getElementById("copy-modal").classList.add("open");
+}
+
+async function confirmDuplicate() {
+  const title  = document.getElementById("copy-title").value.trim();
+  const folder = document.getElementById("copy-folder").value.trim();
+  if (!title)  { showToast("テスト名を入力してください"); return; }
+  if (!folder) { showToast("フォルダを入力してください"); return; }
+
+  const btn = document.getElementById("copy-confirm-btn");
+  btn.disabled = true; btn.textContent = "作成中...";
+
+  try {
+    const srcDoc = await db.collection("exams").doc(copyingExamId).get();
+    if (!srcDoc.exists) { showToast("コピー元が見つかりません"); return; }
+    const src = srcDoc.data();
+
+    const newData = {
+      title,
+      folder,
+      questionCount : src.questionCount  || 72,
+      choices       : src.choices        || 5,
+      passingScore  : src.passingScore   || 60,
+      answerKey     : src.answerKey      || {},
+      pdfUrl        : src.pdfUrl         || "",
+      category      : EXAM_CATEGORY,
+      isActive      : false,   // 停止状態でコピー
+      createdAt     : firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt     : firebase.firestore.FieldValue.serverTimestamp(),
+    };
+
+    await db.collection("exams").add(newData);
+    closeModal("copy-modal");
+    showToast("コピーしました（停止状態で作成）");
+    initDashboard();
+  } catch(e) {
+    showToast("コピー失敗：" + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "コピーして作成";
+  }
+}
+
+function onCopyFolderInput() {
+  const val = document.getElementById("copy-folder").value.toLowerCase();
+  const matches = existingFolders.filter(f => f.toLowerCase().includes(val));
+  const sug = document.getElementById("copy-folder-suggestions");
+  if (!matches.length) { sug.style.display = "none"; return; }
+  sug.innerHTML = matches.map(f =>
+    `<div class="sug-item" onmousedown="pickCopyFolder('${f.replace(/'/g,"\\'")}')">📁 ${esc(f)}</div>`
+  ).join("");
+  sug.style.display = "block";
+}
+function pickCopyFolder(f) {
+  document.getElementById("copy-folder").value = f;
+  document.getElementById("copy-folder-suggestions").style.display = "none";
+}
+function hideCopySug() {
+  setTimeout(() => { document.getElementById("copy-folder-suggestions").style.display = "none"; }, 150);
 }
 
 function showUrlModal(examId) {
